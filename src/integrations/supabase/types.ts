@@ -518,7 +518,13 @@ export type Database = {
       approval_mode: "auto" | "manual"
       church_status: "pending" | "active" | "inactive" | "disabled" | "archived"
       class_owner_type: "platform" | "church"
-      class_status: "draft" | "published" | "archived" | "cancelled"
+      class_status:
+        | "draft"
+        | "published"
+        | "open"
+        | "closed"
+        | "archived"
+        | "cancelled"
       enrollment_status:
         | "pending"
         | "approved"
@@ -658,7 +664,14 @@ export const Constants = {
       approval_mode: ["auto", "manual"],
       church_status: ["pending", "active", "inactive", "disabled", "archived"],
       class_owner_type: ["platform", "church"],
-      class_status: ["draft", "published", "archived", "cancelled"],
+      class_status: [
+        "draft",
+        "published",
+        "open",
+        "closed",
+        "archived",
+        "cancelled",
+      ],
       enrollment_status: [
         "pending",
         "approved",
