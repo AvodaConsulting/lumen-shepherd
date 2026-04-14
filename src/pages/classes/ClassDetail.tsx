@@ -562,30 +562,15 @@ const ClassDetail = () => {
           </TabsContent>
         )}
 
-        <TabsContent value="materials">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Materials / 教材</CardTitle></CardHeader>
-            <CardContent>
-              {materials.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No materials added yet. / 尚未新增任何教材。</p>
-              ) : (
-                <div className="space-y-2">
-                  {materials.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <div>
-                        <span className="text-sm font-medium">{m.english_title}</span>
-                        {m.chinese_title_traditional && <span className="text-xs text-muted-foreground font-chinese ml-2">{m.chinese_title_traditional}</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">{m.type}</Badge>
-                        <StatusChip status={m.is_published ? "active" : "draft"} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="structure">
+          <LessonsManager
+            classId={cls.id}
+            lessons={lessons}
+            onLessonsChange={setLessons}
+            materials={materials}
+            onMaterialsChange={setMaterials}
+            canEdit={(isSuperAdmin || isChurchAdmin) && cls.status !== "archived" && cls.status !== "cancelled"}
+          />
         </TabsContent>
       </Tabs>
     </div>
