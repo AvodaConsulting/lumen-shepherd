@@ -336,6 +336,53 @@ export type Database = {
         }
         Relationships: []
       }
+      lessons: {
+        Row: {
+          chinese_description_traditional: string | null
+          chinese_title_traditional: string | null
+          class_id: string
+          created_at: string
+          english_description: string | null
+          english_title: string
+          id: string
+          is_published: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          chinese_description_traditional?: string | null
+          chinese_title_traditional?: string | null
+          class_id: string
+          created_at?: string
+          english_description?: string | null
+          english_title: string
+          id?: string
+          is_published?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          chinese_description_traditional?: string | null
+          chinese_title_traditional?: string | null
+          class_id?: string
+          created_at?: string
+          english_description?: string | null
+          english_title?: string
+          id?: string
+          is_published?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lessons_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       materials: {
         Row: {
           chinese_title_traditional: string | null
@@ -345,6 +392,7 @@ export type Database = {
           file_url: string | null
           id: string
           is_published: boolean
+          lesson_id: string | null
           sort_order: number
           type: Database["public"]["Enums"]["material_type"]
           updated_at: string
@@ -357,6 +405,7 @@ export type Database = {
           file_url?: string | null
           id?: string
           is_published?: boolean
+          lesson_id?: string | null
           sort_order?: number
           type?: Database["public"]["Enums"]["material_type"]
           updated_at?: string
@@ -369,6 +418,7 @@ export type Database = {
           file_url?: string | null
           id?: string
           is_published?: boolean
+          lesson_id?: string | null
           sort_order?: number
           type?: Database["public"]["Enums"]["material_type"]
           updated_at?: string
@@ -379,6 +429,13 @@ export type Database = {
             columns: ["class_id"]
             isOneToOne: false
             referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "materials_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
             referencedColumns: ["id"]
           },
         ]

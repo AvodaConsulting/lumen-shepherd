@@ -11,12 +11,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/StatusChip";
 import { toast } from "@/hooks/use-toast";
 import { useAuditLog } from "@/hooks/useAuditLog";
-import { ArrowLeft, BookOpen, Users, FileText, Church, Edit2, Save, X, UserPlus } from "lucide-react";
+import { ArrowLeft, BookOpen, Users, FileText, Church, Edit2, Save, X, UserPlus, Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Database } from "@/integrations/supabase/types";
+import LessonsManager from "./LessonsManager";
 
 type ClassRow = Database["public"]["Tables"]["classes"]["Row"];
 
@@ -50,6 +51,7 @@ const ClassDetail = () => {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [churches, setChurches] = useState<{ id: string; english_name: string }[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<any[]>([]);
   const [selectedChurch, setSelectedChurch] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -67,17 +69,19 @@ const ClassDetail = () => {
   useEffect(() => {
     if (!id) return;
     const fetchAll = async () => {
-      const [clsRes, enrRes, asgRes, matRes] = await Promise.all([
+      const [clsRes, enrRes, asgRes, matRes, lesRes] = await Promise.all([
         supabase.from("classes").select("*").eq("id", id).single(),
         supabase.from("enrollments").select("*, profiles!enrollments_member_id_fkey(english_name, chinese_name_traditional)").eq("class_id", id).order("created_at", { ascending: false }),
         supabase.from("class_church_assignments").select("*, churches(english_name)").eq("class_id", id),
         supabase.from("materials").select("*").eq("class_id", id).order("sort_order"),
+        supabase.from("lessons").select("*").eq("class_id", id).order("sort_order"),
       ]);
       setCls(clsRes.data);
       setForm(clsRes.data || {});
       setEnrollments(enrRes.data || []);
       setAssignments(asgRes.data || []);
       setMaterials(matRes.data || []);
+      setLessons(lesRes.data || []);
 
       // Check user's own enrollment
       if (user) {
@@ -365,9 +369,9 @@ const ClassDetail = () => {
       <Tabs defaultValue="info">
         <TabsList>
           <TabsTrigger value="info"><BookOpen className="h-3.5 w-3.5 mr-1" /> Info</TabsTrigger>
+          <TabsTrigger value="structure"><Layers className="h-3.5 w-3.5 mr-1" /> Structure ({lessons.length} lessons)</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="assignments"><Church className="h-3.5 w-3.5 mr-1" /> Assignments</TabsTrigger>}
           {(isSuperAdmin || isChurchAdmin) && <TabsTrigger value="enrollments"><Users className="h-3.5 w-3.5 mr-1" /> Enrollments ({enrollments.length})</TabsTrigger>}
-          <TabsTrigger value="materials"><FileText className="h-3.5 w-3.5 mr-1" /> Materials ({materials.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info">
@@ -558,30 +562,15 @@ const ClassDetail = () => {
           </TabsContent>
         )}
 
-        <TabsContent value="materials">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Materials / 教材</CardTitle></CardHeader>
-            <CardContent>
-              {materials.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No materials added yet. / 尚未新增任何教材。</p>
-              ) : (
-                <div className="space-y-2">
-                  {materials.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <div>
-                        <span className="text-sm font-medium">{m.english_title}</span>
-                        {m.chinese_title_traditional && <span className="text-xs text-muted-foreground font-chinese ml-2">{m.chinese_title_traditional}</span>}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">{m.type}</Badge>
-                        <StatusChip status={m.is_published ? "active" : "draft"} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="structure">
+          <LessonsManager
+            classId={cls.id}
+            lessons={lessons}
+            onLessonsChange={setLessons}
+            materials={materials}
+            onMaterialsChange={setMaterials}
+            canEdit={(isSuperAdmin || isChurchAdmin) && cls.status !== "archived" && cls.status !== "cancelled"}
+          />
         </TabsContent>
       </Tabs>
     </div>
