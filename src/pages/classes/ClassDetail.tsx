@@ -69,17 +69,19 @@ const ClassDetail = () => {
   useEffect(() => {
     if (!id) return;
     const fetchAll = async () => {
-      const [clsRes, enrRes, asgRes, matRes] = await Promise.all([
+      const [clsRes, enrRes, asgRes, matRes, lesRes] = await Promise.all([
         supabase.from("classes").select("*").eq("id", id).single(),
         supabase.from("enrollments").select("*, profiles!enrollments_member_id_fkey(english_name, chinese_name_traditional)").eq("class_id", id).order("created_at", { ascending: false }),
         supabase.from("class_church_assignments").select("*, churches(english_name)").eq("class_id", id),
         supabase.from("materials").select("*").eq("class_id", id).order("sort_order"),
+        supabase.from("lessons").select("*").eq("class_id", id).order("sort_order"),
       ]);
       setCls(clsRes.data);
       setForm(clsRes.data || {});
       setEnrollments(enrRes.data || []);
       setAssignments(asgRes.data || []);
       setMaterials(matRes.data || []);
+      setLessons(lesRes.data || []);
 
       // Check user's own enrollment
       if (user) {
