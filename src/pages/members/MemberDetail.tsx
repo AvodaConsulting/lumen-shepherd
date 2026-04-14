@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusChip } from "@/components/StatusChip";
 import { toast } from "@/hooks/use-toast";
 import { useAuditLog } from "@/hooks/useAuditLog";
-import { ArrowLeft, Edit2, Save, X } from "lucide-react";
+import { ArrowLeft, Edit2, Save, X, UserPlus } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { Database } from "@/integrations/supabase/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
@@ -20,7 +21,7 @@ const MemberDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { log } = useAuditLog();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isChurchAdmin, user } = useAuth();
   const [member, setMember] = useState<(Profile & { churches?: { english_name: string } | null }) | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,19 +31,35 @@ const MemberDetail = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
 
+  // Enroll member into class
+  const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState("");
+  const [enrollDialogOpen, setEnrollDialogOpen] = useState(false);
+  const [enrollingMember, setEnrollingMember] = useState(false);
+
   const fetchMember = async () => {
     if (!id) return;
     setLoading(true);
-    const [profileRes, enrollRes, rolesRes] = await Promise.all([
-      supabase.from("profiles").select("*, churches(english_name)").eq("id", id).single(),
-      supabase.from("enrollments").select("*, classes(english_title, chinese_title_traditional)").eq("member_id", (await supabase.from("profiles").select("user_id").eq("id", id).single()).data?.user_id || "").order("created_at", { ascending: false }),
-      supabase.from("user_roles").select("role").eq("user_id", (await supabase.from("profiles").select("user_id").eq("id", id).single()).data?.user_id || ""),
+    const { data: profileData } = await supabase.from("profiles").select("*, churches(english_name)").eq("id", id).single();
+    if (!profileData) { setLoading(false); return; }
+    setMember(profileData);
+    setForm(profileData);
+
+    const userId = profileData.user_id;
+    const [enrollRes, rolesRes] = await Promise.all([
+      supabase.from("enrollments").select("*, classes(english_title, chinese_title_traditional)").eq("member_id", userId).order("created_at", { ascending: false }),
+      supabase.from("user_roles").select("role").eq("user_id", userId),
     ]);
-    setMember(profileRes.data);
-    setForm(profileRes.data || {});
     setEnrollments(enrollRes.data || []);
     setRoles(rolesRes.data?.map((r: any) => r.role) || []);
     setLoading(false);
+  };
+
+  const loadAvailableClasses = async () => {
+    if (!member) return;
+    const { data } = await supabase.from("classes").select("id, english_title, chinese_title_traditional, status").in("status", ["open", "published"]).order("english_title");
+    const enrolledClassIds = new Set(enrollments.filter((e) => e.status !== "withdrawn" && e.status !== "rejected").map((e) => e.class_id));
+    setAvailableClasses((data || []).filter((c) => !enrolledClassIds.has(c.id)));
   };
 
   useEffect(() => {
@@ -81,6 +98,27 @@ const MemberDetail = () => {
     if (!error) {
       await log("member_status_changed", "member", id, { new_status: newStatus });
       toast({ title: `Member status changed to ${newStatus}` });
+      fetchMember();
+    }
+  };
+
+  const handleEnrollMemberToClass = async () => {
+    if (!member || !selectedClassId) return;
+    setEnrollingMember(true);
+    const { error } = await supabase.from("enrollments").insert({
+      member_id: member.user_id,
+      class_id: selectedClassId,
+      church_id: member.church_id,
+      status: "approved",
+    } as any);
+    setEnrollingMember(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      await log("enrollment_admin_created", "enrollment", selectedClassId, { member_name: member.english_name });
+      toast({ title: "Member enrolled / 已為會員報名" });
+      setSelectedClassId("");
+      setEnrollDialogOpen(false);
       fetchMember();
     }
   };
@@ -185,14 +223,46 @@ const MemberDetail = () => {
 
       {/* Enrollment history */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Enrollment History / 報名記錄 ({enrollments.length})</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>Enrollment History / 報名記錄 ({enrollments.length})</span>
+            {(isSuperAdmin || isChurchAdmin) && (
+              <Dialog open={enrollDialogOpen} onOpenChange={(open) => { setEnrollDialogOpen(open); if (open) loadAvailableClasses(); }}>
+                <DialogTrigger asChild>
+                  <Button size="sm"><UserPlus className="h-4 w-4 mr-1" /> Enroll in Class / 報名課程</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Enroll {member.english_name} in a Class</DialogTitle></DialogHeader>
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">Select a class to enroll this member. They will be auto-approved. / 選擇課程為此會員報名，將自動通過審核。</p>
+                    {availableClasses.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No available classes. / 沒有可用課程。</p>
+                    ) : (
+                      <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                        <SelectTrigger><SelectValue placeholder="Select class..." /></SelectTrigger>
+                        <SelectContent>
+                          {availableClasses.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.english_title}{c.chinese_title_traditional ? ` / ${c.chinese_title_traditional}` : ""} ({c.status})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Button onClick={handleEnrollMemberToClass} disabled={!selectedClassId || enrollingMember} className="w-full">
+                      {enrollingMember ? "Enrolling..." : "Enroll / 報名"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </CardTitle>
+        </CardHeader>
         <CardContent>
           {enrollments.length === 0 ? (
             <p className="text-sm text-muted-foreground">No enrollment history. / 暫無報名記錄。</p>
           ) : (
             <div className="space-y-2">
               {enrollments.map((e) => (
-                <div key={e.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                <div key={e.id} className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded px-2 -mx-2" onClick={() => navigate(`/classes/${e.class_id}`)}>
                   <div>
                     <p className="text-sm font-medium">{e.classes?.english_title}</p>
                     {e.classes?.chinese_title_traditional && <p className="text-xs text-muted-foreground font-chinese">{e.classes.chinese_title_traditional}</p>}

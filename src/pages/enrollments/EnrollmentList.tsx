@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,15 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatusChip } from "@/components/StatusChip";
 import { toast } from "@/hooks/use-toast";
 import { useAuditLog } from "@/hooks/useAuditLog";
-import { GraduationCap, Search } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { GraduationCap, Search, ExternalLink } from "lucide-react";
 
 const EnrollmentList = () => {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const { isSuperAdmin, isChurchAdmin, user } = useAuth();
+  const { isSuperAdmin, isChurchAdmin, isMember, user } = useAuth();
   const { log } = useAuditLog();
+  const navigate = useNavigate();
 
   const fetchEnrollments = async () => {
     setLoading(true);
@@ -41,6 +44,19 @@ const EnrollmentList = () => {
     } else {
       await log(`enrollment_${newStatus}`, "enrollment", enrollmentId);
       toast({ title: `Enrollment ${newStatus}` });
+      fetchEnrollments();
+    }
+  };
+
+  const handleWithdraw = async (enrollmentId: string) => {
+    const { error } = await supabase.from("enrollments").update({
+      status: "withdrawn" as any,
+    }).eq("id", enrollmentId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      await log("enrollment_withdrawn", "enrollment", enrollmentId);
+      toast({ title: "Enrollment withdrawn / 已退出報名" });
       fetchEnrollments();
     }
   };
@@ -92,29 +108,61 @@ const EnrollmentList = () => {
             <p className="text-muted-foreground text-xs font-chinese mt-0.5">
               {isSuperAdmin || isChurchAdmin ? "報名申請將在此顯示" : "您尚未報名任何課程。瀏覽課程目錄以尋找課程。"}
             </p>
+            {isMember && (
+              <Button className="mt-4" onClick={() => navigate("/classes")}>Browse Classes / 瀏覽課程</Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3">
           {filtered.map((enr) => (
-            <Card key={enr.id}>
+            <Card key={enr.id} className="hover:shadow-sm transition-shadow">
               <CardContent className="flex items-center gap-4 py-4">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold truncate">{enr.classes?.english_title || "Unknown Class"}</h3>
                   {enr.classes?.chinese_title_traditional && <p className="text-sm text-muted-foreground font-chinese truncate">{enr.classes.chinese_title_traditional}</p>}
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Member: {enr.profiles?.english_name || "Unknown"}
+                    {(isSuperAdmin || isChurchAdmin) && <>Member: {enr.profiles?.english_name || "Unknown"}{enr.profiles?.chinese_name_traditional && ` / ${enr.profiles.chinese_name_traditional}`}</>}
                     {enr.churches?.english_name && ` · ${enr.churches.english_name}`}
                     {` · ${new Date(enr.created_at).toLocaleDateString()}`}
                   </p>
                 </div>
                 <StatusChip status={enr.status} />
+
+                {/* Admin actions */}
                 {(isSuperAdmin || isChurchAdmin) && enr.status === "pending" && (
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" className="text-success border-success/30" onClick={() => handleStatusChange(enr.id, "approved")}>Approve</Button>
                     <Button size="sm" variant="outline" className="text-destructive border-destructive/30" onClick={() => handleStatusChange(enr.id, "rejected")}>Reject</Button>
                   </div>
                 )}
+                {(isSuperAdmin || isChurchAdmin) && enr.status === "approved" && (
+                  <Button size="sm" variant="outline" onClick={() => handleStatusChange(enr.id, "completed")}>Complete</Button>
+                )}
+
+                {/* Member withdraw */}
+                {isMember && enr.member_id === user?.id && (enr.status === "pending" || enr.status === "approved") && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="text-destructive border-destructive/30">Withdraw / 退出</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Withdraw enrollment? / 退出報名？</AlertDialogTitle>
+                        <AlertDialogDescription>You can re-enroll later if spots are available.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel / 取消</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleWithdraw(enr.id)}>Withdraw / 退出</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+
+                {/* View class link */}
+                <Button size="sm" variant="ghost" onClick={() => navigate(`/classes/${enr.class_id}`)}>
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Button>
               </CardContent>
             </Card>
           ))}
