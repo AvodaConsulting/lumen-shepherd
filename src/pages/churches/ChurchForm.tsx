@@ -52,7 +52,17 @@ const ChurchForm = () => {
 
     const { data, error } = await supabase
       .from("churches")
-      .insert({ ...form, logo_url })
+      .insert({
+        english_name: form.english_name,
+        chinese_name_traditional: form.chinese_name_traditional || null,
+        contact_person: form.contact_person,
+        contact_email: form.contact_email,
+        contact_phone: form.contact_phone || null,
+        district_or_address: form.district_or_address || null,
+        status: form.status as any,
+        theme_color: form.theme_color || null,
+        logo_url,
+      })
       .select()
       .single();
 
