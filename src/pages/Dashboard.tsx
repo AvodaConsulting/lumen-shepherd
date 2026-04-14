@@ -1,15 +1,27 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Church, Users, BookOpen, GraduationCap, Bell } from "lucide-react";
+import { Church, Users, BookOpen, GraduationCap, Bell, ScrollText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { StatusChip } from "@/components/StatusChip";
+
+interface AuditEntry {
+  id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  created_at: string;
+}
 
 const Dashboard = () => {
-  const { profile, roles, isSuperAdmin, isChurchAdmin, isMember } = useAuth();
+  const { profile, isSuperAdmin, isChurchAdmin, isMember } = useAuth();
   const [stats, setStats] = useState({ churches: 0, members: 0, classes: 0, enrollments: 0, announcements: 0 });
+  const [classByStatus, setClassByStatus] = useState<Record<string, number>>({});
+  const [enrollByStatus, setEnrollByStatus] = useState<Record<string, number>>({});
+  const [recentLogs, setRecentLogs] = useState<AuditEntry[]>([]);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchAll = async () => {
       const [churches, members, classes, enrollments, announcements] = await Promise.all([
         supabase.from("churches").select("id", { count: "exact", head: true }),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
@@ -24,9 +36,35 @@ const Dashboard = () => {
         enrollments: enrollments.count || 0,
         announcements: announcements.count || 0,
       });
+
+      // Class breakdown by status
+      const { data: classData } = await supabase.from("classes").select("status");
+      if (classData) {
+        const counts: Record<string, number> = {};
+        classData.forEach((c) => { counts[c.status] = (counts[c.status] || 0) + 1; });
+        setClassByStatus(counts);
+      }
+
+      // Enrollment breakdown by status
+      const { data: enrollData } = await supabase.from("enrollments").select("status");
+      if (enrollData) {
+        const counts: Record<string, number> = {};
+        enrollData.forEach((e) => { counts[e.status] = (counts[e.status] || 0) + 1; });
+        setEnrollByStatus(counts);
+      }
+
+      // Recent audit logs
+      if (isSuperAdmin || isChurchAdmin) {
+        const { data: logs } = await supabase
+          .from("audit_logs")
+          .select("id, action, entity_type, entity_id, created_at")
+          .order("created_at", { ascending: false })
+          .limit(8);
+        setRecentLogs((logs as AuditEntry[]) || []);
+      }
     };
-    fetchStats();
-  }, []);
+    fetchAll();
+  }, [isSuperAdmin, isChurchAdmin]);
 
   const statCards = [
     ...(isSuperAdmin ? [{ label: "Churches", labelCn: "教會", value: stats.churches, icon: Church, color: "text-primary" }] : []),
@@ -42,9 +80,7 @@ const Dashboard = () => {
         <h1 className="text-2xl font-bold">
           Welcome, {profile?.english_name}
           {profile?.chinese_name_traditional && (
-            <span className="ml-2 text-muted-foreground font-chinese text-xl">
-              {profile.chinese_name_traditional}
-            </span>
+            <span className="ml-2 text-muted-foreground font-chinese text-xl">{profile.chinese_name_traditional}</span>
           )}
         </h1>
         <p className="text-muted-foreground mt-1">
@@ -54,7 +90,8 @@ const Dashboard = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {statCards.map((card) => (
           <Card key={card.label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -70,6 +107,71 @@ const Dashboard = () => {
           </Card>
         ))}
       </div>
+
+      {/* Breakdowns */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Classes by status */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">Classes by Status / 課程狀態</CardTitle></CardHeader>
+          <CardContent>
+            {Object.keys(classByStatus).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No classes yet / 暫無課程</p>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(classByStatus).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between">
+                    <StatusChip status={status} showChinese />
+                    <span className="font-semibold">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Enrollments by status */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">Enrollments by Status / 報名狀態</CardTitle></CardHeader>
+          <CardContent>
+            {Object.keys(enrollByStatus).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No enrollments yet / 暫無報名</p>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(enrollByStatus).map(([status, count]) => (
+                  <div key={status} className="flex items-center justify-between">
+                    <StatusChip status={status} showChinese />
+                    <span className="font-semibold">{count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent audit logs */}
+      {(isSuperAdmin || isChurchAdmin) && (
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><ScrollText className="h-4 w-4" /> Recent Activity / 最近活動</CardTitle></CardHeader>
+          <CardContent>
+            {recentLogs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No activity recorded yet / 暫無活動記錄</p>
+            ) : (
+              <div className="space-y-2">
+                {recentLogs.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
+                    <div className="flex items-center gap-2">
+                      <StatusChip status={entry.action.includes("created") ? "active" : entry.action.includes("approved") ? "approved" : entry.action.includes("rejected") ? "rejected" : "pending"} />
+                      <span className="text-muted-foreground">{entry.entity_type}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{new Date(entry.created_at).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

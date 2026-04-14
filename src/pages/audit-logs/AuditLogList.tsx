@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { StatusChip } from "@/components/StatusChip";
 import { ScrollText, Search } from "lucide-react";
 
 const AuditLogList = () => {
@@ -22,25 +22,11 @@ const AuditLogList = () => {
     l.entity_type.toLowerCase().includes(search.toLowerCase())
   );
 
-  const actionColors: Record<string, string> = {
-    created: "bg-success/10 text-success",
-    updated: "bg-primary/10 text-primary",
-    approved: "bg-success/10 text-success",
-    rejected: "bg-destructive/10 text-destructive",
-  };
-
-  const getActionColor = (action: string) => {
-    for (const [key, value] of Object.entries(actionColors)) {
-      if (action.includes(key)) return value;
-    }
-    return "bg-muted text-muted-foreground";
-  };
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Audit Logs / 審計日誌</h1>
-        <p className="text-muted-foreground text-sm">Track all system activities</p>
+        <p className="text-muted-foreground text-sm">Track all system activities / 追蹤所有系統活動</p>
       </div>
 
       <div className="relative max-w-sm">
@@ -55,6 +41,7 @@ const AuditLogList = () => {
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <ScrollText className="h-12 w-12 text-muted-foreground/30 mb-4" />
             <h3 className="font-semibold text-lg">No audit logs</h3>
+            <p className="text-muted-foreground text-sm mt-1">No activity has been recorded yet. / 暫無活動記錄。</p>
           </CardContent>
         </Card>
       ) : (
@@ -62,9 +49,18 @@ const AuditLogList = () => {
           {filtered.map((entry) => (
             <Card key={entry.id}>
               <CardContent className="flex items-center gap-4 py-3">
-                <Badge variant="outline" className={getActionColor(entry.action)}>{entry.action}</Badge>
+                <StatusChip
+                  status={
+                    entry.action.includes("created") ? "active" :
+                    entry.action.includes("approved") ? "approved" :
+                    entry.action.includes("rejected") ? "rejected" :
+                    entry.action.includes("updated") ? "published" :
+                    "pending"
+                  }
+                />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{entry.entity_type} <span className="text-muted-foreground">#{entry.entity_id?.slice(0, 8)}</span></p>
+                  <p className="text-sm font-medium">{entry.action} — {entry.entity_type}</p>
+                  {entry.entity_id && <p className="text-xs text-muted-foreground">ID: {entry.entity_id.slice(0, 8)}...</p>}
                   {entry.details && <p className="text-xs text-muted-foreground truncate">{JSON.stringify(entry.details)}</p>}
                 </div>
                 <p className="text-xs text-muted-foreground whitespace-nowrap">{new Date(entry.created_at).toLocaleString()}</p>
