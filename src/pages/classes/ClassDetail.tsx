@@ -372,7 +372,6 @@ const ClassDetail = () => {
           <TabsTrigger value="structure"><Layers className="h-3.5 w-3.5 mr-1" /> Structure ({lessons.length} lessons)</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="assignments"><Church className="h-3.5 w-3.5 mr-1" /> Assignments</TabsTrigger>}
           {(isSuperAdmin || isChurchAdmin) && <TabsTrigger value="enrollments"><Users className="h-3.5 w-3.5 mr-1" /> Enrollments ({enrollments.length})</TabsTrigger>}
-          <TabsTrigger value="materials"><FileText className="h-3.5 w-3.5 mr-1" /> Materials ({materials.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info">
