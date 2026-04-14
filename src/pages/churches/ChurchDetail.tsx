@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -16,23 +16,15 @@ import type { Database } from "@/integrations/supabase/types";
 type Church = Database["public"]["Tables"]["churches"]["Row"];
 
 const ChurchDetail = () => {
-  const { id: routeId } = (() => {
-    const params = new URLSearchParams();
-    // We use useParams in the actual component below
-    return { id: undefined as string | undefined };
-  })();
-
-  return <ChurchDetailInner />;
-};
-
-const ChurchDetailInner = () => {
+  const { id: paramId } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { log } = useAuditLog();
   const { isSuperAdmin, isChurchAdmin, profile } = useAuth();
 
-  // Determine ID: for /my-church use profile.church_id, otherwise use URL param
-  const urlId = window.location.pathname.startsWith("/my-church") ? profile?.church_id : window.location.pathname.split("/churches/")[1];
-  const id = urlId || undefined;
+  const isMyChurch = location.pathname.startsWith("/my-church");
+  const id = isMyChurch ? profile?.church_id : paramId;
+  const canChangeStatus = isSuperAdmin;
 
   const [church, setChurch] = useState<Church | null>(null);
   const [editing, setEditing] = useState(false);
@@ -43,31 +35,27 @@ const ChurchDetailInner = () => {
   const [members, setMembers] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
 
-  const isMyChurch = window.location.pathname.startsWith("/my-church");
-  const canChangeStatus = isSuperAdmin; // Only super admin can change church status
-
   const fetchChurch = async () => {
     if (!id) return;
     setLoading(true);
-    const [churchRes, membersRes, classesRes] = await Promise.all([
+    const [churchRes, membersRes] = await Promise.all([
       supabase.from("churches").select("*").eq("id", id).single(),
       supabase.from("profiles").select("id, english_name, chinese_name_traditional, status, email").eq("church_id", id).order("english_name"),
-      supabase.from("classes").select("id, english_title, chinese_title_traditional, status, owner_type").or(`owner_church_id.eq.${id}`).order("english_title"),
     ]);
     setChurch(churchRes.data);
     setForm(churchRes.data || {});
     setMembers(membersRes.data || []);
 
-    // Also get assigned platform classes
+    // Get church-owned classes
+    const { data: ownedClasses } = await supabase.from("classes").select("id, english_title, chinese_title_traditional, status, owner_type").eq("owner_church_id", id);
+    // Get assigned platform classes
     const { data: assignments } = await supabase.from("class_church_assignments").select("class_id, classes(id, english_title, chinese_title_traditional, status, owner_type)").eq("church_id", id);
     const assignedClasses = (assignments || []).map((a: any) => a.classes).filter(Boolean);
-    const churchOwned = classesRes.data || [];
-    // Merge, avoiding duplicates
-    const allIds = new Set(churchOwned.map((c: any) => c.id));
-    const merged = [...churchOwned];
+    const owned = ownedClasses || [];
+    const allIds = new Set(owned.map((c: any) => c.id));
+    const merged = [...owned];
     assignedClasses.forEach((c: any) => { if (!allIds.has(c.id)) merged.push(c); });
     setClasses(merged);
-
     setLoading(false);
   };
 
@@ -86,7 +74,6 @@ const ChurchDetailInner = () => {
       const { data: urlData } = supabase.storage.from("church-logos").getPublicUrl(path);
       logo_url = urlData.publicUrl;
     }
-
     const updatePayload: any = {
       english_name: form.english_name,
       chinese_name_traditional: form.chinese_name_traditional,
@@ -97,11 +84,7 @@ const ChurchDetailInner = () => {
       theme_color: form.theme_color,
       logo_url,
     };
-
-    // Only super admin can change status
-    if (canChangeStatus) {
-      updatePayload.status = form.status;
-    }
+    if (canChangeStatus) updatePayload.status = form.status;
 
     const { error } = await supabase.from("churches").update(updatePayload).eq("id", id);
     setSaving(false);
@@ -118,9 +101,7 @@ const ChurchDetailInner = () => {
   const handleStatusChange = async (newStatus: string) => {
     if (!id) return;
     const { error } = await supabase.from("churches").update({ status: newStatus as any }).eq("id", id);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    if (!error) {
       await log("church_status_changed", "church", id, { new_status: newStatus });
       toast({ title: `Church status changed to ${newStatus}` });
       fetchChurch();
@@ -144,6 +125,7 @@ const ChurchDetailInner = () => {
             <div>
               <h1 className="text-2xl font-bold">{isMyChurch ? "My Church / 我的教會" : church.english_name}</h1>
               {church.chinese_name_traditional && <p className="text-muted-foreground font-chinese">{church.chinese_name_traditional}</p>}
+              {isMyChurch && <p className="text-sm text-muted-foreground">{church.english_name}</p>}
             </div>
           </div>
         </div>
@@ -153,22 +135,27 @@ const ChurchDetailInner = () => {
         </div>
       </div>
 
-      {/* Quick status actions for super admin */}
       {canChangeStatus && !editing && (
         <div className="flex gap-2 flex-wrap">
           {church.status !== "active" && (
-            <ConfirmButton label="Activate / 啟用" description="This will make the church active and visible." onConfirm={() => handleStatusChange("active")} variant="outline" className="text-success border-success/30" />
+            <ConfirmButton label="Activate / 啟用" description="This will make the church active and visible." onConfirm={() => handleStatusChange("active")} className="text-success border-success/30" />
           )}
           {church.status === "active" && (
-            <ConfirmButton label="Deactivate / 停用" description="This will mark the church as inactive." onConfirm={() => handleStatusChange("inactive")} variant="outline" className="text-warning border-warning/30" />
+            <ConfirmButton label="Deactivate / 停用" description="This will mark the church as inactive." onConfirm={() => handleStatusChange("inactive")} className="text-warning border-warning/30" />
           )}
           {church.status !== "archived" && (
-            <ConfirmButton label="Archive / 歸檔" description="This will archive the church. This action should be used for churches that are no longer operating." onConfirm={() => handleStatusChange("archived")} variant="outline" className="text-muted-foreground" />
+            <ConfirmButton label="Archive / 歸檔" description="This will archive the church." onConfirm={() => handleStatusChange("archived")} className="text-muted-foreground" />
           )}
         </div>
       )}
 
-      {/* Church info card */}
+      {isMyChurch && isChurchAdmin && (
+        <div className="bg-muted/50 border border-border rounded-lg p-3 text-sm text-muted-foreground">
+          You can edit your church profile details. Church status can only be changed by a platform administrator.
+          <br /><span className="font-chinese">您可以編輯教會資料。教會狀態只能由平台管理員更改。</span>
+        </div>
+      )}
+
       <Card>
         <CardHeader><CardTitle>{editing ? "Edit Church / 編輯教會" : "Church Details / 教會資料"}</CardTitle></CardHeader>
         <CardContent>
@@ -191,16 +178,14 @@ const ChurchDetailInner = () => {
                 <div className="space-y-2">
                   <Label>Church Logo / 教會標誌</Label>
                   <div className="flex items-center gap-3">
-                    <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("logo-edit")?.click()}>
-                      <Upload className="h-4 w-4 mr-2" /> Upload
-                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById("logo-edit")?.click()}><Upload className="h-4 w-4 mr-2" /> Upload</Button>
                     <input id="logo-edit" type="file" accept="image/*" className="hidden" onChange={(e) => setLogoFile(e.target.files?.[0] || null)} />
                     {logoFile && <span className="text-sm text-muted-foreground">{logoFile.name}</span>}
                   </div>
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
-                <Button onClick={handleSave} disabled={saving}><Save className="h-4 w-4 mr-1" /> {saving ? "Saving..." : "Save Changes / 儲存"}</Button>
+                <Button onClick={handleSave} disabled={saving}><Save className="h-4 w-4 mr-1" /> {saving ? "Saving..." : "Save / 儲存"}</Button>
                 <Button variant="outline" onClick={() => { setEditing(false); setForm(church); setLogoFile(null); }}><X className="h-4 w-4 mr-1" /> Cancel / 取消</Button>
               </div>
             </div>
@@ -219,7 +204,6 @@ const ChurchDetailInner = () => {
         </CardContent>
       </Card>
 
-      {/* Members tab */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
@@ -229,7 +213,7 @@ const ChurchDetailInner = () => {
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No members in this church yet. / 此教會目前沒有會員。</p>
+            <p className="text-sm text-muted-foreground">No members in this church yet. Click 'Add Member' to invite someone. / 此教會目前沒有會員。</p>
           ) : (
             <div className="space-y-2">
               {members.map((m) => (
@@ -247,7 +231,6 @@ const ChurchDetailInner = () => {
         </CardContent>
       </Card>
 
-      {/* Classes tab */}
       <Card>
         <CardHeader><CardTitle className="text-base">Classes / 課程 ({classes.length})</CardTitle></CardHeader>
         <CardContent>
@@ -275,11 +258,9 @@ const ChurchDetailInner = () => {
   );
 };
 
-const ConfirmButton = ({ label, description, onConfirm, variant, className }: { label: string; description: string; onConfirm: () => void; variant?: any; className?: string }) => (
+const ConfirmButton = ({ label, description, onConfirm, className }: { label: string; description: string; onConfirm: () => void; className?: string }) => (
   <AlertDialog>
-    <AlertDialogTrigger asChild>
-      <Button size="sm" variant={variant} className={className}>{label}</Button>
-    </AlertDialogTrigger>
+    <AlertDialogTrigger asChild><Button size="sm" variant="outline" className={className}>{label}</Button></AlertDialogTrigger>
     <AlertDialogContent>
       <AlertDialogHeader>
         <AlertDialogTitle>Confirm Action / 確認操作</AlertDialogTitle>
