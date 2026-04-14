@@ -21,6 +21,8 @@ import ClassDetail from "./pages/classes/ClassDetail";
 import EnrollmentList from "./pages/enrollments/EnrollmentList";
 import AnnouncementList from "./pages/announcements/AnnouncementList";
 import AuditLogList from "./pages/audit-logs/AuditLogList";
+import SavedClasses from "./pages/saved/SavedClasses";
+import Notifications from "./pages/notifications/Notifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,21 +41,36 @@ const App = () => (
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
 
+              {/* Super admin only */}
               <Route path="/churches" element={<ProtectedRoute allowedRoles={["super_admin"]}><ChurchList /></ProtectedRoute>} />
               <Route path="/churches/new" element={<ProtectedRoute allowedRoles={["super_admin"]}><ChurchForm /></ProtectedRoute>} />
               <Route path="/churches/:id" element={<ProtectedRoute allowedRoles={["super_admin", "church_admin"]}><ChurchDetail /></ProtectedRoute>} />
 
+              {/* Church admin: My Church */}
+              <Route path="/my-church" element={<ProtectedRoute allowedRoles={["church_admin"]}><ChurchDetail /></ProtectedRoute>} />
+
+              {/* Members management */}
               <Route path="/members" element={<ProtectedRoute allowedRoles={["super_admin", "church_admin"]}><MemberList /></ProtectedRoute>} />
               <Route path="/members/new" element={<ProtectedRoute allowedRoles={["super_admin", "church_admin"]}><MemberForm /></ProtectedRoute>} />
               <Route path="/members/:id" element={<ProtectedRoute allowedRoles={["super_admin", "church_admin"]}><MemberDetail /></ProtectedRoute>} />
 
+              {/* Classes - visible to all */}
               <Route path="/classes" element={<ClassList />} />
               <Route path="/classes/new" element={<ProtectedRoute allowedRoles={["super_admin", "church_admin"]}><ClassForm /></ProtectedRoute>} />
               <Route path="/classes/:id" element={<ClassDetail />} />
 
+              {/* Enrollments - visible to all */}
               <Route path="/enrollments" element={<EnrollmentList />} />
+
+              {/* Announcements - visible to all */}
               <Route path="/announcements" element={<AnnouncementList />} />
+
+              {/* Audit logs - admins only */}
               <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={["super_admin", "church_admin"]}><AuditLogList /></ProtectedRoute>} />
+
+              {/* Member-specific pages */}
+              <Route path="/saved" element={<SavedClasses />} />
+              <Route path="/notifications" element={<Notifications />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
