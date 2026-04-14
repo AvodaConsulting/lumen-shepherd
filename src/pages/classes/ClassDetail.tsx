@@ -51,6 +51,7 @@ const ClassDetail = () => {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [churches, setChurches] = useState<{ id: string; english_name: string }[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
+  const [lessons, setLessons] = useState<any[]>([]);
   const [selectedChurch, setSelectedChurch] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
