@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusChip } from "@/components/StatusChip";
 import { toast } from "@/hooks/use-toast";
 import { useAuditLog } from "@/hooks/useAuditLog";
-import { ArrowLeft, BookOpen, Users, FileText, Church, Edit2, Save, X, UserPlus } from "lucide-react";
+import { ArrowLeft, BookOpen, Users, FileText, Church, Edit2, Save, X, UserPlus, Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
